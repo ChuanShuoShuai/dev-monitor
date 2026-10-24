@@ -1,0 +1,57 @@
+{
+  "_说明": "这是模板。真正生效的是同目录的 config.json（由『首次配置.bat』生成）。最少只填 ue.workspaceRoot + ue.projectRoot，其余留空自动派生。要用多工程写法，见下面的 _projects示例。",
+
+  "host": "0.0.0.0",
+  "port": 8787,
+  "pollIntervalMs": 700,
+  "allowBuild": true,
+
+  "ue": {
+    "workspaceRoot": "",
+    "projectRoot": "",
+    "projectName": "",
+
+    "buildBat": "",
+    "buildOutLog": "",
+    "buildErrorsLog": "",
+    "buildLogsDir": "",
+    "ueLog": "",
+    "suiteOut": "",
+    "shotDir": "",
+    "savedDir": "",
+    "crashesDir": ""
+  },
+
+  "_projects示例": {
+    "说明": "把上面 ue 段删掉，改用 projects 数组即可同时监控多个工程/多种技术栈（一个工程一项）。",
+    "projects": [
+      {
+        "id": "my-ue-game",
+        "name": "我的 UE 工程",
+        "kind": "ue",
+        "workspaceRoot": "E:/MyGame",
+        "projectRoot": "E:/MyGame/MyGame"
+      },
+      {
+        "id": "my-web-app",
+        "name": "我的前端工程",
+        "kind": "node",
+        "root": "E:/MyWeb",
+        "buildCmd": "node build.js",
+        "runCmd": "node tools/serve.mjs",
+        "distDir": "E:/MyWeb/dist"
+      }
+    ]
+  },
+
+  "match": {
+    "storyCategories": ["LogMouseAdventure"],
+    "streamCategoryPrefix": "LogStream"
+  },
+
+  "limits": {
+    "ueLogLines": 400,
+    "buildLines": 200,
+    "artifacts": 80
+  }
+}

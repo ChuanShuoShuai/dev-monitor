@@ -1,0 +1,17 @@
+{
+  "name": "工程监控",
+  "short_name": "工程监控",
+  "description": "手机端实时查看工程编译进度、运行日志、自检结果与产物",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

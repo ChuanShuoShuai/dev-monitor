@@ -1,0 +1,12 @@
+{
+	"appId": "com.shuaiguo.devmonitor",
+	"appName": "工程监控",
+	"webDir": "web",
+	"android": {
+		"allowMixedContent": true,
+		"captureInput": true
+	},
+	"server": {
+		"androidScheme": "http"
+	}
+}

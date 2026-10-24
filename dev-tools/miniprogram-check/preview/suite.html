@@ -1,0 +1,843 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=375, initial-scale=1">
+<title>suite</title>
+<style>
+html,body{margin:0;padding:0;width:375px;background:#070b18}
+/* 工程监控 · 小程序端全局样式
+   ============================================================
+   这里的每一组参数都是从 web/style.css 折过来的，不是重新调的：
+     1px = 1.00px（375.00px 屏宽），圆角 / 字号 / 间距 / 阴影半径全部 ×2。
+   玻璃质感靠三层叠出来，和网页版同一套配方：
+     ① 底色 —— page 上的三团彩色光斑（对应网页的 .blob-layer）
+     ② 透光体 —— 152° 白渐变 + rgba(18,18,18,.42) 中性灰容器
+     ③ 厚度 —— 上缘近纯白高光 + 0.50px 渐变亮边（.card::before）+ 低位长投影
+   ⚠ 小程序不能指望 backdrop-filter（低版本 WebView / 安卓 XWeb 表现不一），
+     所以「模糊」这一层省掉了，靠渐变和描边补足层次 —— 这也是唯一的刻意差异。
+   ============================================================ */
+
+body {
+  --bg: #070b18;
+
+  --r-card: 22.00px;                         /* 液态玻璃一律走大圆角（网页 22px） */
+  --r-pill: 499.50px;
+  --r-well: 14.00px;                         /* 卡内「井」：日志框 / 输入框（网页 14px） */
+
+  --line: rgba(255, 255, 255, .12);        /* 玻璃接缝 */
+  --hi: rgba(255, 255, 255, .35);          /* 上缘高光 */
+  --txt: #ffffff;
+  --dim: rgba(235, 238, 245, .60);
+  --dim-2: rgba(235, 238, 245, .42);
+  --ok: #30d158;
+  --bad: #ff4d4f;
+  --warn: #ff8d28;
+  --acc: #0091ff;
+  --story: #5ad1c0;
+  --mono: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  /* 底色与光斑：网页是 linear-gradient(165deg,…) 打底 + 三团 blur(70px) 光斑。
+     小程序没有 blur 滤镜，直接把径向渐变收窄一点，出同样的「深蓝底 + 三处辉光」。 */
+  background-color: #0b1020;
+  background-image:
+    linear-gradient(165deg, #0b1020 0%, #0d1430 55%, #111a3d 100%),
+    radial-gradient(58% 38% at 4% 6%, rgba(76, 141, 255, .40), rgba(76, 141, 255, 0) 68%),
+    radial-gradient(50% 34% at 100% 34%, rgba(126, 224, 192, .22), rgba(126, 224, 192, 0) 68%),
+    radial-gradient(56% 36% at 44% 104%, rgba(157, 108, 255, .22), rgba(157, 108, 255, 0) 68%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+
+  color: var(--txt);
+  font-size: 15.00px;                        /* 15px */
+  line-height: 1.55;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 小程序的 button 自带一圈 ::after 边框和一整套默认背景，不清掉没法做胶囊按钮 */
+button {
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  line-height: normal;
+  font-size: inherit;
+  color: inherit;
+}
+button::after {
+  border: none;
+}
+
+/* ---------------- 工程切换条（网页 #projbar） ----------------
+   网页只在多工程时出现；小程序常驻，因为它同时是「设置」的入口。
+   横向可滑，滚动条藏掉，手势是手机上的自然动作。 */
+
+.projbar {
+  display: flex;
+  align-items: center;
+  padding: 8.00px 11.00px 6.00px;
+  gap: 6.00px;
+}
+.proj-scroll {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+}
+.proj {
+  display: inline-flex;
+  align-items: center;
+  gap: 7.00px;
+  margin-right: 6.00px;
+  padding: 7.00px 13.00px;
+  border-radius: var(--r-pill);
+  border: 0.50px solid rgba(255, 255, 255, .14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .03));
+  color: var(--dim);
+  font-size: 13.00px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .35);
+  transition: background .2s, border-color .2s, color .2s;
+}
+.proj.on {
+  color: #fff;
+  border-color: rgba(255, 255, 255, .30);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .08)),
+    rgba(0, 145, 255, .30);
+  box-shadow:
+    inset 0 1.50px 0 rgba(255, 255, 255, .8),
+    0 8.00px 18.00px -10.00px rgba(0, 120, 255, .6);
+}
+.pd {
+  width: 7.00px;
+  height: 7.00px;
+  border-radius: 50%;
+  flex: none;
+  background: rgba(255, 255, 255, .35);
+}
+.pd.run {
+  background: var(--acc);
+  box-shadow: 0 0 8.00px rgba(0, 145, 255, .9);
+  animation: pdPulse 1.3s ease-in-out infinite;
+}
+.pd.ok {
+  background: var(--ok);
+}
+.pd.bad {
+  background: var(--bad);
+}
+@keyframes pdPulse {
+  0%, 100% { opacity: .45; }
+  50% { opacity: 1; }
+}
+.kb {
+  font-size: 10.50px;
+  font-weight: 500;
+  opacity: .62;
+  letter-spacing: 0.20px;
+}
+.gear {
+  flex: none;
+  padding: 7.00px 11.00px;
+  border-radius: var(--r-pill);
+  font-size: 12.00px;
+  color: rgba(255, 255, 255, .72);
+  border: 0.50px solid rgba(255, 255, 255, .16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .14), rgba(255, 255, 255, .04));
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .40);
+}
+.gear:active {
+  background: rgba(255, 255, 255, .16);
+}
+
+/* 连接失败的横幅：点一下直接去设置页 */
+.banner {
+  margin: 2.00px 11.00px 8.00px;
+  padding: 9.00px 12.00px;
+  border-radius: 12.00px;
+  font-size: 12.00px;
+  line-height: 1.6;
+  color: #ffc9ca;
+  background: rgba(255, 77, 79, .12);
+  border: 0.50px solid rgba(255, 77, 79, .35);
+}
+
+/* ---------------- 卡片：液态玻璃 ---------------- */
+
+.card {
+  position: relative;
+  isolation: isolate;
+  margin: 0 11.00px 12.00px;
+  padding: 14.00px 15.00px;
+  border-radius: var(--r-card);
+  border: 0.50px solid rgba(255, 255, 255, .10);
+  background:
+    linear-gradient(152deg,
+      rgba(255, 255, 255, .16) 0%,
+      rgba(255, 255, 255, .06) 30%,
+      rgba(255, 255, 255, .02) 62%,
+      rgba(255, 255, 255, .09) 100%),
+    rgba(16, 20, 34, .42);
+  box-shadow:
+    inset 0 1.50px 0 rgba(255, 255, 255, .62),
+    inset 0 -1.00px 0 rgba(255, 255, 255, .10),
+    0 24.00px 28.00px -14.00px rgba(0, 0, 0, .48);
+}
+/* 边缘一圈：上亮 → 侧暗 → 右下回光（网页用 1px 描边 + mask 模拟折射带）。
+   ⚠ 万一运行环境不认 -webkit-mask，::before 会退化成一层很淡的白渐变盖在卡面上，
+     文字仍然清楚（它铺在背景上方、内容下方），不会出现整块发灰。 */
+.card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 0.50px;
+  pointer-events: none;
+  background: linear-gradient(150deg,
+    rgba(255, 255, 255, .60) 0%,
+    rgba(255, 255, 255, .14) 22%,
+    rgba(255, 255, 255, .04) 46%,
+    rgba(255, 255, 255, .10) 70%,
+    rgba(255, 255, 255, .34) 100%);
+  -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+  -webkit-mask-composite: xor;
+          mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+          mask-composite: exclude;
+}
+
+.card-h {
+  display: flex;
+  align-items: center;
+  font-size: 12.00px;
+  line-height: 1.35;                      /* 网页这一行 16px，全局 1.55 会撑到 18.6 */
+  color: var(--dim);
+  letter-spacing: 0.50px;
+  margin-bottom: 9.00px;
+}
+.card-h .grow {
+  flex: 1;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+.dim {
+  color: var(--dim);
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
+.mono {
+  font-family: var(--mono);
+}
+
+/* ---------------- 状态徽标：小玻璃糖（颜色只走 tint 与描边） ---------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 4.00px 12.00px;
+  border-radius: var(--r-pill);
+  font-size: 12.00px;
+  font-weight: 700;
+  letter-spacing: 0.50px;
+  line-height: 1.35;                      /* 同上：全局 1.55 会把徽标高撑 2.6px（网页 26px） */
+  color: var(--dim);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .02)),
+    rgba(150, 170, 230, .10);
+  border: 0.50px solid rgba(255, 255, 255, .12);
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .22);
+}
+.badge.run {
+  color: #d6e6ff;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .02)), rgba(76, 141, 255, .26);
+  border-color: rgba(150, 195, 255, .48);
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .4), 0 6.00px 16.00px -8.00px rgba(76, 141, 255, .7);
+}
+.badge.ok {
+  color: #8ff0bd;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .02)), rgba(47, 191, 113, .20);
+  border-color: rgba(99, 230, 164, .45);
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .4), 0 6.00px 16.00px -8.00px rgba(47, 191, 113, .6);
+}
+.badge.bad {
+  color: #ffb3b3;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .02)), rgba(255, 93, 93, .20);
+  border-color: rgba(255, 143, 143, .45);
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .4), 0 6.00px 16.00px -8.00px rgba(255, 93, 93, .6);
+}
+.badge.mini {
+  padding: 1.00px 7.00px;
+  font-size: 10.00px;
+  letter-spacing: 0.25px;
+}
+
+/* ---------------- 进度条：内凹玻璃槽 + 带高光的进度 ---------------- */
+
+.progress {
+  height: 10.00px;
+  box-sizing: border-box;                 /* 不然 0.50px 边框会把 10px 撑成 12px（网页固定 10px） */
+  border-radius: 499.50px;
+  background: rgba(6, 10, 24, .42);
+  border: 0.50px solid rgba(255, 255, 255, .08);
+  box-shadow: inset 0 1.00px 3.00px rgba(0, 0, 0, .45), inset 0 -1.00px 0 rgba(255, 255, 255, .06);
+  overflow: hidden;
+}
+.progress .bar {
+  height: 100%;
+  border-radius: 499.50px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(90deg, var(--acc), #7ab0ff);
+  box-shadow: 0 0 14.00px rgba(76, 141, 255, .7), inset 0 1.00px 0 rgba(255, 255, 255, .55);
+  transition: width .35s ease;
+}
+.progress .bar.ok {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(90deg, var(--ok), #63e6a4);
+  box-shadow: 0 0 14.00px rgba(47, 191, 113, .65), inset 0 1.00px 0 rgba(255, 255, 255, .5);
+}
+.progress .bar.bad {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(90deg, var(--bad), #ff8f8f);
+  box-shadow: 0 0 14.00px rgba(255, 93, 93, .6), inset 0 1.00px 0 rgba(255, 255, 255, .45);
+}
+/* 总步数未知时的「滚动条」跑马灯，别让用户以为进度 0% 卡住了 */
+.progress.indet .bar {
+  width: 34% !important;
+  animation: slide 1.15s ease-in-out infinite;
+}
+@keyframes slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(330%); }
+}
+
+/* ---------------- 按钮（网页 .b-btn） ---------------- */
+
+.btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+  padding: 11.00px 6.00px;
+  border-radius: var(--r-pill);
+  border: 0.50px solid rgba(255, 255, 255, .14);
+  font-size: 13.00px;
+  font-weight: 650;
+  color: var(--txt);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .03)),
+    rgba(255, 255, 255, .04);
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .26), 0 8.00px 20.00px -12.00px rgba(2, 6, 18, .8);
+  box-sizing: border-box;
+}
+.btn.primary {
+  color: #fff;
+  border-color: rgba(175, 210, 255, .45);
+  background:
+    radial-gradient(120% 160% at 50% -50%, rgba(255, 255, 255, .55), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(160deg, rgba(76, 141, 255, .60), rgba(58, 104, 224, .45));
+  box-shadow:
+    inset 0 1.00px 0 rgba(255, 255, 255, .58),
+    inset 0 -12.00px 18.00px -16.00px rgba(255, 255, 255, .7),
+    0 14.00px 30.00px -14.00px rgba(60, 120, 255, .8);
+}
+.btn.danger {
+  color: #fff;
+  border-color: rgba(255, 175, 175, .45);
+  background:
+    radial-gradient(120% 160% at 50% -50%, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(160deg, rgba(255, 93, 93, .58), rgba(206, 58, 58, .45));
+  box-shadow:
+    inset 0 1.00px 0 rgba(255, 255, 255, .5),
+    inset 0 -12.00px 18.00px -16.00px rgba(255, 255, 255, .65),
+    0 14.00px 30.00px -14.00px rgba(255, 93, 93, .75);
+}
+.btn.ghost {
+  color: #dbe7ff;
+}
+.btn:active {
+  filter: brightness(1.14);
+}
+.btn[disabled] {
+  opacity: .45;
+}
+.btn-row {
+  display: flex;
+  gap: 8.00px;
+}
+.btn-row .btn {
+  flex: 1;
+}
+/* 编译卡底部那排：和网页一样 11px 上间距、8px 间隔 */
+.b-actions {
+  margin-top: 11.00px;
+  gap: 8.00px;
+}
+
+/* ---------------- 分类 chips（玻璃胶囊，参数同底部导航） ---------------- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6.00px;
+  /* 网页里 .chips 住在 main 的 11px 内边距里，自身只带 margin-bottom:10px。
+     这里是通栏布局，所以左右各补 11px，否则第一枚胶囊会贴着屏幕边。
+     刻意不加 padding-top / 不放大 line-height：胶囊高必须还是 32px，和网页一致 */
+  margin: 0 11.00px 10.00px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 7.00px 15.00px;
+  border-radius: var(--r-pill);
+  border: 0.50px solid rgba(255, 255, 255, .18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .05)),
+    rgba(120, 128, 150, .10);
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .45);
+  color: rgba(255, 255, 255, .70);
+  font-size: 12.50px;
+  font-weight: 600;
+  line-height: 1.35;                      /* 页面全局 1.55 会把胶囊撑到 35.4px（网页 32px） */
+}
+.chip.on {
+  color: #fff;
+  border-color: rgba(120, 195, 255, .55);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .30), rgba(255, 255, 255, .08)),
+    rgba(0, 145, 255, .42);
+  box-shadow:
+    inset 0 1.50px 0 rgba(255, 255, 255, .9),
+    0 8.00px 18.00px -10.00px rgba(0, 130, 255, .7);
+}
+.chip .n {
+  margin-left: 4.00px;
+  opacity: .65;
+  font-variant-numeric: tabular-nums;
+}
+.chips-row {
+  display: flex;
+  align-items: center;
+  gap: 6.00px;
+  padding: 2.00px 11.00px 7.00px;
+}
+.chips-row .chips {
+  flex: 1;
+  min-width: 0;
+  margin: 0;                              /* 外壳 .chips-row 已经带 11.00px 内边距 */
+}
+
+/* ---------------- 列表（网页 .item：单行 名称 + 标签 + 大小 + 时间） ---------------- */
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8.00px;
+  padding: 10.00px 4.00px;
+  border-bottom: 0.50px solid rgba(120, 145, 220, .10);
+}
+.item:last-child {
+  border-bottom: none;
+}
+.item:active {
+  background: rgba(120, 160, 255, .10);
+  border-radius: 10.00px;
+}
+.item-main {
+  flex: 1;
+  min-width: 0;
+}
+.item-t {
+  font-size: 13.00px;                        /* 网页 .item .nm 13px */
+  color: var(--txt);
+  word-break: break-all;
+}
+.item-s {
+  margin-top: 2.00px;
+  font-size: 11.00px;
+  color: var(--dim-2);
+}
+.nm {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.00px;
+  word-break: break-all;
+}
+.sz {
+  flex: none;
+  font-size: 11.00px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.tm {
+  flex: none;
+  width: 82.00px;
+  text-align: right;
+  font-size: 11.00px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+/* 小标签：网页 .tag（编译归档的 Succeeded / Failed 用的就是它，不是 .badge）
+   颜色名按用途取：blue = 成功/报告、red = 失败/崩溃、green = 当前状态、teal = 截图 */
+.tag {
+  flex: none;
+  font-size: 10.00px;
+  padding: 2.00px 7.00px;
+  border-radius: 5.00px;
+  background: rgba(150, 170, 230, .12);
+  border: 0.50px solid var(--line);
+  color: var(--dim);
+}
+.tag.blue {
+  background: rgba(76, 141, 255, .16);
+  border-color: rgba(120, 180, 255, .40);
+  color: #9cc4ff;
+}
+.tag.red {
+  background: rgba(255, 93, 93, .16);
+  border-color: rgba(255, 143, 143, .40);
+  color: var(--bad);
+}
+.tag.green {
+  background: rgba(47, 191, 113, .16);
+  border-color: rgba(99, 230, 164, .40);
+  color: #8ff0bd;
+}
+.tag.teal {
+  background: rgba(126, 224, 192, .14);
+  border-color: rgba(126, 224, 192, .40);
+  color: var(--story);
+}
+.thumb {
+  width: 40.00px;
+  height: 40.00px;
+  border-radius: 9.00px;
+  flex: none;
+  background: #0d1327;
+  border: 0.50px solid rgba(160, 190, 255, .25);
+  box-shadow: 0 3.00px 10.00px rgba(3, 6, 18, .45);
+}
+
+/* ---------------- 卡内的「井」：日志框 ---------------- */
+
+.logbox {
+  font-family: var(--mono);
+  font-size: 11.50px;                        /* 网页 11.5px */
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #c6d0e8;
+  padding: 9.00px 11.00px;
+  border-radius: var(--r-well);
+  background: rgba(5, 9, 20, .52);
+  border: 0.50px solid rgba(255, 255, 255, .07);
+  box-shadow: inset 0 1.00px 6.00px rgba(0, 0, 0, .38);
+}
+.logbox .l {
+  padding: 1.00px 0;
+}
+
+/* ---------------- 空状态 ---------------- */
+
+.empty {
+  margin: 0 11.00px 12.00px;
+  padding: 45.00px 22.00px;
+  border-radius: var(--r-card);
+  background:
+    linear-gradient(152deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .03) 52%, rgba(255, 255, 255, .07)),
+    rgba(18, 18, 18, .38);
+  border: 0.50px solid rgba(255, 255, 255, .10);
+  box-shadow: inset 0 1.50px 0 rgba(255, 255, 255, .45), 0 24.00px 28.00px -14.00px rgba(0, 0, 0, .45);
+  text-align: center;
+}
+.empty-t {
+  font-size: 16.00px;
+  font-weight: 650;
+  margin-bottom: 7.00px;
+}
+.empty-b {
+  font-size: 12.50px;
+  line-height: 1.75;
+  color: var(--dim);
+}
+.empty-b code {
+  font-family: var(--mono);
+  color: #9fd0ff;
+}
+.empty-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 14.00px;
+  padding: 9.00px 23.00px;
+  border-radius: var(--r-pill);
+  font-size: 13.00px;
+  font-weight: 650;
+  color: #fff;
+  border: 0.50px solid rgba(175, 210, 255, .45);
+  background:
+    radial-gradient(120% 160% at 50% -50%, rgba(255, 255, 255, .55), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(160deg, rgba(76, 141, 255, .60), rgba(58, 104, 224, .45));
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .58), 0 14.00px 30.00px -14.00px rgba(60, 120, 255, .8);
+}
+
+/* 底部留白：内容不被浮动页签压到（页签本体 65.00px + 底距 12.00px + 余量）
+   ⚠ 必须把安全区算进去：iPhone 的 home 指示条有 34px，只写 90.00px 时
+     列表最后一行正好被压在页签底下（"没适配手机"最常见的真身）。 */
+.pad-b {
+  height: calc(90.00px + 0px);
+}
+
+/* ---------------- 自绘遮罩 / 底部确认条 ----------------
+   刻意不用 wx.showModal：系统弹窗是浅色直角卡片，压在深色玻璃上很突兀。
+   点遮罩 = 取消，点卡片本身 = 什么都不做（catchtap 拦住冒泡）。 */
+
+.mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 80;
+  background: rgba(3, 6, 15, .62);
+  display: flex;
+  align-items: flex-end;
+}
+.sheet {
+  width: 100%;
+  padding: 17.00px 16.00px 23.00px;
+  border-radius: 17.00px 17.00px 0 0;
+  background: #131a2c;
+  border-top: 0.50px solid rgba(255, 255, 255, .14);
+  animation: sheet-in .2s ease-out;
+}
+@keyframes sheet-in {
+  from { transform: translateY(20.00px); opacity: .6; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.sheet-t {
+  font-size: 16.00px;
+  font-weight: 650;
+}
+.sheet-b {
+  margin-top: 6.00px;
+  font-size: 12.50px;
+  line-height: 1.65;
+  color: var(--dim);
+}
+
+/* 轻提示：自己画一条，避免 wx.showToast 的高亮底色打断整体色调
+   ⚠ 底距要抬到浮动页签之上（页签 65.00px + 底距 12.00px + 余量），再叠安全区 */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(95.00px + 0px);
+  transform: translateX(-50%);
+  z-index: 90;
+  max-width: 78%;
+  padding: 8.00px 16.00px;
+  border-radius: 499.50px;
+  font-size: 12.50px;
+  color: #fff;
+  background: rgba(18, 24, 42, .96);
+  border: 0.50px solid rgba(255, 255, 255, .16);
+  box-shadow: 0 5.00px 15.00px rgba(0, 0, 0, .45);
+}
+
+/* 自检页 —— 参数对齐 web/style.css 的 .grid / .tile */
+
+.hero {
+  padding: 16.00px 17.00px;
+}
+/* 标题沿用网页 .step（17px / 650），汇总用 .dim */
+.step {
+  font-size: 17.00px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.sum {
+  font-size: 12.00px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10.00px;
+  margin: 0 11.00px 12.00px;
+}
+
+.tile {
+  position: relative;
+  isolation: isolate;
+  border-radius: 20.00px;
+  padding: 12.00px 13.00px;
+  border: 0.50px solid transparent;
+  background:
+    linear-gradient(152deg, rgba(255, 255, 255, .14), rgba(255, 255, 255, .04) 46%, rgba(255, 255, 255, .09)),
+    rgba(18, 18, 18, .40);
+  box-shadow:
+    inset 0 1.50px 0 rgba(255, 255, 255, .70),
+    0 22.00px 26.00px -16.00px rgba(0, 0, 0, .45);
+}
+/* 磁贴的彩色描边：按结果换成绿 / 红 / 橙的 0.50px 渐变圈 */
+.tile::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 0.50px;
+  pointer-events: none;
+  background: linear-gradient(150deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, .04) 45%, rgba(255, 255, 255, .22));
+  -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+  -webkit-mask-composite: xor;
+          mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+          mask-composite: exclude;
+}
+.tile.pass::before {
+  background: linear-gradient(150deg, rgba(99, 230, 164, .75), rgba(47, 191, 113, .10) 55%, rgba(99, 230, 164, .35));
+}
+.tile.fail::before {
+  background: linear-gradient(150deg, rgba(255, 143, 143, .75), rgba(255, 93, 93, .10) 55%, rgba(255, 143, 143, .35));
+}
+.tile.unk::before {
+  background: linear-gradient(150deg, rgba(255, 203, 120, .70), rgba(255, 171, 46, .10) 55%, rgba(255, 203, 120, .32));
+}
+
+.tile .n {
+  font-size: 13.00px;
+  font-weight: 650;
+  margin-bottom: 5.00px;
+  word-break: break-all;
+}
+.tile .r {
+  font-size: 11.00px;
+  color: rgba(255, 255, 255, .66);
+  line-height: 1.45;
+  word-break: break-all;
+}
+.tile.pass .n {
+  color: var(--ok);
+}
+.tile.fail .n {
+  color: var(--bad);
+}
+.tile.unk .n {
+  color: var(--warn);
+}
+
+/* 浮动玻璃页签 —— 参数抄 web/style.css 的 #tabbar / #tab-glider，1px = 1.00px */
+
+.tb {
+  position: fixed;
+  left: 50%;
+  bottom: calc(12.00px + 0px);
+  transform: translateX(-50%);
+  z-index: 30;
+  width: calc(100% - 22.00px);
+  max-width: 520.00px;
+  padding: 7.00px;
+  border-radius: 34.00px;
+  border: 0.50px solid rgba(255, 255, 255, .38);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .12) 52%, rgba(255, 255, 255, .18)),
+    rgba(120, 128, 150, .16);
+  /* 页签是浮在滚动内容上的：没有这一层模糊，底下的日志会直接透出来，文字互相干扰。
+     iOS 与安卓 XWeb 都认 -webkit- 前缀；不认的机型退化成半透明磨砂（仍可读）。 */
+  backdrop-filter: blur(10px) saturate(1.5);
+  -webkit-backdrop-filter: blur(10px) saturate(1.5);
+  box-shadow:
+    inset 0 1.50px 0 rgba(255, 255, 255, .95),
+    inset 0 -1.00px 0 rgba(255, 255, 255, .22),
+    0 22.00px 34.00px -16.00px rgba(0, 0, 0, .65);
+  box-sizing: border-box;
+}
+
+.tb-in {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+/* 滑块：宽度正好一个页签（5 等分），位移靠 translateX 百分比 = 自宽，
+   所以不依赖容器实测宽度，横竖屏切换也不会错位。 */
+.glider {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 20%;
+  border-radius: 28.00px;
+  border: 0.50px solid rgba(255, 255, 255, .55);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .42), rgba(255, 255, 255, .18)),
+    rgba(255, 255, 255, .10);
+  box-shadow:
+    inset 0 1.50px 0 rgba(255, 255, 255, .95),
+    0 10.00px 20.00px -12.00px rgba(0, 0, 0, .55);
+  transition: transform .34s cubic-bezier(.22, .9, .24, 1);
+  pointer-events: none;
+}
+
+.tab {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 7.00px 0 6.00px;
+  border-radius: 26.00px;
+  color: rgba(255, 255, 255, .62);
+  font-size: 11.00px;
+  font-weight: 600;
+  line-height: 1;
+}
+.tab:active {
+  background: rgba(255, 255, 255, .06);
+}
+.tab.on:active {
+  background: transparent;
+}
+.tab.on {
+  color: #0a84ff;
+}
+
+.ti {
+  width: 23.00px;
+  height: 23.00px;
+  margin-bottom: 3.00px;
+}
+.tab.on .ti {
+  /* 网页用 drop-shadow 给选中图标描一圈蓝光，PNG 图标用同样的滤镜补上 */
+  filter: drop-shadow(0 0.50px 3.00px rgba(0, 130, 255, .45));
+}
+
+.tl {
+  font-size: 11.00px;
+  line-height: 1;
+}
+
+/* 预览专用：把 WXSS 里靠 page 生效的东西补回来 */
+body{min-height:812px;padding-bottom:110px}
+
+</style></head><body><div class="projbar"><div class="proj-scroll" style=";overflow-x:auto;"><div class="proj on"><div class="pd ok"></div><span>CursorAdventure</span><span class="kb">Unreal Engine</span></div><div class="proj "><div class="pd ok"></div><span>移动简历</span><span class="kb">Node / 前端构建</span></div></div><div class="gear">设置</div></div><div class="card hero"><div class="row"><span class="step">自检套件</span><div class="grow"></div><span class="dim sum">通过 3 / 4</span></div></div><div class="grid"><div class="tile pass"><div class="n">member_decls</div><div class="r">全部通过（仍需真机编译才算数）</div></div><div class="tile pass"><div class="n">brace</div><div class="r">0 个文件括号不平（共查 85 个）</div></div><div class="tile pass"><div class="n">anon_ns</div><div class="r">0 组文件级重名（共查 85 个文件、630 个候选名字）</div></div><div class="tile unk"><div class="n">missing_includes</div><div class="r">（无结果行）</div></div></div><div class="pad-b"></div><div class="tb"><div class="tb-in"><div class="glider" style="transform: translateX(200%)"></div><div class="tab "><img class="ti" src="file:///E:/UE4/dev-monitor/miniprogram/images/tab-build.png"><span class="tl">编译</span></div><div class="tab "><img class="ti" src="file:///E:/UE4/dev-monitor/miniprogram/images/tab-run.png"><span class="tl">运行</span></div><div class="tab on"><img class="ti" src="file:///E:/UE4/dev-monitor/miniprogram/images/tab-suite-on.png"><span class="tl">自检</span></div><div class="tab "><img class="ti" src="file:///E:/UE4/dev-monitor/miniprogram/images/tab-art.png"><span class="tl">产物</span></div><div class="tab "><img class="ti" src="file:///E:/UE4/dev-monitor/miniprogram/images/tab-arch.png"><span class="tl">档案</span></div></div></div></body></html>

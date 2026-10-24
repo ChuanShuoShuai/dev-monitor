@@ -1,0 +1,851 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=375, initial-scale=1">
+<title>run</title>
+<style>
+html,body{margin:0;padding:0;width:375px;background:#070b18}
+/* 工程监控 · 小程序端全局样式
+   ============================================================
+   这里的每一组参数都是从 web/style.css 折过来的，不是重新调的：
+     1px = 1.00px（375.00px 屏宽），圆角 / 字号 / 间距 / 阴影半径全部 ×2。
+   玻璃质感靠三层叠出来，和网页版同一套配方：
+     ① 底色 —— page 上的三团彩色光斑（对应网页的 .blob-layer）
+     ② 透光体 —— 152° 白渐变 + rgba(18,18,18,.42) 中性灰容器
+     ③ 厚度 —— 上缘近纯白高光 + 0.50px 渐变亮边（.card::before）+ 低位长投影
+   ⚠ 小程序不能指望 backdrop-filter（低版本 WebView / 安卓 XWeb 表现不一），
+     所以「模糊」这一层省掉了，靠渐变和描边补足层次 —— 这也是唯一的刻意差异。
+   ============================================================ */
+
+body {
+  --bg: #070b18;
+
+  --r-card: 22.00px;                         /* 液态玻璃一律走大圆角（网页 22px） */
+  --r-pill: 499.50px;
+  --r-well: 14.00px;                         /* 卡内「井」：日志框 / 输入框（网页 14px） */
+
+  --line: rgba(255, 255, 255, .12);        /* 玻璃接缝 */
+  --hi: rgba(255, 255, 255, .35);          /* 上缘高光 */
+  --txt: #ffffff;
+  --dim: rgba(235, 238, 245, .60);
+  --dim-2: rgba(235, 238, 245, .42);
+  --ok: #30d158;
+  --bad: #ff4d4f;
+  --warn: #ff8d28;
+  --acc: #0091ff;
+  --story: #5ad1c0;
+  --mono: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  /* 底色与光斑：网页是 linear-gradient(165deg,…) 打底 + 三团 blur(70px) 光斑。
+     小程序没有 blur 滤镜，直接把径向渐变收窄一点，出同样的「深蓝底 + 三处辉光」。 */
+  background-color: #0b1020;
+  background-image:
+    linear-gradient(165deg, #0b1020 0%, #0d1430 55%, #111a3d 100%),
+    radial-gradient(58% 38% at 4% 6%, rgba(76, 141, 255, .40), rgba(76, 141, 255, 0) 68%),
+    radial-gradient(50% 34% at 100% 34%, rgba(126, 224, 192, .22), rgba(126, 224, 192, 0) 68%),
+    radial-gradient(56% 36% at 44% 104%, rgba(157, 108, 255, .22), rgba(157, 108, 255, 0) 68%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+
+  color: var(--txt);
+  font-size: 15.00px;                        /* 15px */
+  line-height: 1.55;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 小程序的 button 自带一圈 ::after 边框和一整套默认背景，不清掉没法做胶囊按钮 */
+button {
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  line-height: normal;
+  font-size: inherit;
+  color: inherit;
+}
+button::after {
+  border: none;
+}
+
+/* ---------------- 工程切换条（网页 #projbar） ----------------
+   网页只在多工程时出现；小程序常驻，因为它同时是「设置」的入口。
+   横向可滑，滚动条藏掉，手势是手机上的自然动作。 */
+
+.projbar {
+  display: flex;
+  align-items: center;
+  padding: 8.00px 11.00px 6.00px;
+  gap: 6.00px;
+}
+.proj-scroll {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+}
+.proj {
+  display: inline-flex;
+  align-items: center;
+  gap: 7.00px;
+  margin-right: 6.00px;
+  padding: 7.00px 13.00px;
+  border-radius: var(--r-pill);
+  border: 0.50px solid rgba(255, 255, 255, .14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .03));
+  color: var(--dim);
+  font-size: 13.00px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .35);
+  transition: background .2s, border-color .2s, color .2s;
+}
+.proj.on {
+  color: #fff;
+  border-color: rgba(255, 255, 255, .30);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .08)),
+    rgba(0, 145, 255, .30);
+  box-shadow:
+    inset 0 1.50px 0 rgba(255, 255, 255, .8),
+    0 8.00px 18.00px -10.00px rgba(0, 120, 255, .6);
+}
+.pd {
+  width: 7.00px;
+  height: 7.00px;
+  border-radius: 50%;
+  flex: none;
+  background: rgba(255, 255, 255, .35);
+}
+.pd.run {
+  background: var(--acc);
+  box-shadow: 0 0 8.00px rgba(0, 145, 255, .9);
+  animation: pdPulse 1.3s ease-in-out infinite;
+}
+.pd.ok {
+  background: var(--ok);
+}
+.pd.bad {
+  background: var(--bad);
+}
+@keyframes pdPulse {
+  0%, 100% { opacity: .45; }
+  50% { opacity: 1; }
+}
+.kb {
+  font-size: 10.50px;
+  font-weight: 500;
+  opacity: .62;
+  letter-spacing: 0.20px;
+}
+.gear {
+  flex: none;
+  padding: 7.00px 11.00px;
+  border-radius: var(--r-pill);
+  font-size: 12.00px;
+  color: rgba(255, 255, 255, .72);
+  border: 0.50px solid rgba(255, 255, 255, .16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .14), rgba(255, 255, 255, .04));
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .40);
+}
+.gear:active {
+  background: rgba(255, 255, 255, .16);
+}
+
+/* 连接失败的横幅：点一下直接去设置页 */
+.banner {
+  margin: 2.00px 11.00px 8.00px;
+  padding: 9.00px 12.00px;
+  border-radius: 12.00px;
+  font-size: 12.00px;
+  line-height: 1.6;
+  color: #ffc9ca;
+  background: rgba(255, 77, 79, .12);
+  border: 0.50px solid rgba(255, 77, 79, .35);
+}
+
+/* ---------------- 卡片：液态玻璃 ---------------- */
+
+.card {
+  position: relative;
+  isolation: isolate;
+  margin: 0 11.00px 12.00px;
+  padding: 14.00px 15.00px;
+  border-radius: var(--r-card);
+  border: 0.50px solid rgba(255, 255, 255, .10);
+  background:
+    linear-gradient(152deg,
+      rgba(255, 255, 255, .16) 0%,
+      rgba(255, 255, 255, .06) 30%,
+      rgba(255, 255, 255, .02) 62%,
+      rgba(255, 255, 255, .09) 100%),
+    rgba(16, 20, 34, .42);
+  box-shadow:
+    inset 0 1.50px 0 rgba(255, 255, 255, .62),
+    inset 0 -1.00px 0 rgba(255, 255, 255, .10),
+    0 24.00px 28.00px -14.00px rgba(0, 0, 0, .48);
+}
+/* 边缘一圈：上亮 → 侧暗 → 右下回光（网页用 1px 描边 + mask 模拟折射带）。
+   ⚠ 万一运行环境不认 -webkit-mask，::before 会退化成一层很淡的白渐变盖在卡面上，
+     文字仍然清楚（它铺在背景上方、内容下方），不会出现整块发灰。 */
+.card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 0.50px;
+  pointer-events: none;
+  background: linear-gradient(150deg,
+    rgba(255, 255, 255, .60) 0%,
+    rgba(255, 255, 255, .14) 22%,
+    rgba(255, 255, 255, .04) 46%,
+    rgba(255, 255, 255, .10) 70%,
+    rgba(255, 255, 255, .34) 100%);
+  -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+  -webkit-mask-composite: xor;
+          mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+          mask-composite: exclude;
+}
+
+.card-h {
+  display: flex;
+  align-items: center;
+  font-size: 12.00px;
+  line-height: 1.35;                      /* 网页这一行 16px，全局 1.55 会撑到 18.6 */
+  color: var(--dim);
+  letter-spacing: 0.50px;
+  margin-bottom: 9.00px;
+}
+.card-h .grow {
+  flex: 1;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+.dim {
+  color: var(--dim);
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
+.mono {
+  font-family: var(--mono);
+}
+
+/* ---------------- 状态徽标：小玻璃糖（颜色只走 tint 与描边） ---------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 4.00px 12.00px;
+  border-radius: var(--r-pill);
+  font-size: 12.00px;
+  font-weight: 700;
+  letter-spacing: 0.50px;
+  line-height: 1.35;                      /* 同上：全局 1.55 会把徽标高撑 2.6px（网页 26px） */
+  color: var(--dim);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .02)),
+    rgba(150, 170, 230, .10);
+  border: 0.50px solid rgba(255, 255, 255, .12);
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .22);
+}
+.badge.run {
+  color: #d6e6ff;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .02)), rgba(76, 141, 255, .26);
+  border-color: rgba(150, 195, 255, .48);
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .4), 0 6.00px 16.00px -8.00px rgba(76, 141, 255, .7);
+}
+.badge.ok {
+  color: #8ff0bd;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .02)), rgba(47, 191, 113, .20);
+  border-color: rgba(99, 230, 164, .45);
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .4), 0 6.00px 16.00px -8.00px rgba(47, 191, 113, .6);
+}
+.badge.bad {
+  color: #ffb3b3;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .02)), rgba(255, 93, 93, .20);
+  border-color: rgba(255, 143, 143, .45);
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .4), 0 6.00px 16.00px -8.00px rgba(255, 93, 93, .6);
+}
+.badge.mini {
+  padding: 1.00px 7.00px;
+  font-size: 10.00px;
+  letter-spacing: 0.25px;
+}
+
+/* ---------------- 进度条：内凹玻璃槽 + 带高光的进度 ---------------- */
+
+.progress {
+  height: 10.00px;
+  box-sizing: border-box;                 /* 不然 0.50px 边框会把 10px 撑成 12px（网页固定 10px） */
+  border-radius: 499.50px;
+  background: rgba(6, 10, 24, .42);
+  border: 0.50px solid rgba(255, 255, 255, .08);
+  box-shadow: inset 0 1.00px 3.00px rgba(0, 0, 0, .45), inset 0 -1.00px 0 rgba(255, 255, 255, .06);
+  overflow: hidden;
+}
+.progress .bar {
+  height: 100%;
+  border-radius: 499.50px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(90deg, var(--acc), #7ab0ff);
+  box-shadow: 0 0 14.00px rgba(76, 141, 255, .7), inset 0 1.00px 0 rgba(255, 255, 255, .55);
+  transition: width .35s ease;
+}
+.progress .bar.ok {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(90deg, var(--ok), #63e6a4);
+  box-shadow: 0 0 14.00px rgba(47, 191, 113, .65), inset 0 1.00px 0 rgba(255, 255, 255, .5);
+}
+.progress .bar.bad {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(90deg, var(--bad), #ff8f8f);
+  box-shadow: 0 0 14.00px rgba(255, 93, 93, .6), inset 0 1.00px 0 rgba(255, 255, 255, .45);
+}
+/* 总步数未知时的「滚动条」跑马灯，别让用户以为进度 0% 卡住了 */
+.progress.indet .bar {
+  width: 34% !important;
+  animation: slide 1.15s ease-in-out infinite;
+}
+@keyframes slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(330%); }
+}
+
+/* ---------------- 按钮（网页 .b-btn） ---------------- */
+
+.btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+  padding: 11.00px 6.00px;
+  border-radius: var(--r-pill);
+  border: 0.50px solid rgba(255, 255, 255, .14);
+  font-size: 13.00px;
+  font-weight: 650;
+  color: var(--txt);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .03)),
+    rgba(255, 255, 255, .04);
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .26), 0 8.00px 20.00px -12.00px rgba(2, 6, 18, .8);
+  box-sizing: border-box;
+}
+.btn.primary {
+  color: #fff;
+  border-color: rgba(175, 210, 255, .45);
+  background:
+    radial-gradient(120% 160% at 50% -50%, rgba(255, 255, 255, .55), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(160deg, rgba(76, 141, 255, .60), rgba(58, 104, 224, .45));
+  box-shadow:
+    inset 0 1.00px 0 rgba(255, 255, 255, .58),
+    inset 0 -12.00px 18.00px -16.00px rgba(255, 255, 255, .7),
+    0 14.00px 30.00px -14.00px rgba(60, 120, 255, .8);
+}
+.btn.danger {
+  color: #fff;
+  border-color: rgba(255, 175, 175, .45);
+  background:
+    radial-gradient(120% 160% at 50% -50%, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(160deg, rgba(255, 93, 93, .58), rgba(206, 58, 58, .45));
+  box-shadow:
+    inset 0 1.00px 0 rgba(255, 255, 255, .5),
+    inset 0 -12.00px 18.00px -16.00px rgba(255, 255, 255, .65),
+    0 14.00px 30.00px -14.00px rgba(255, 93, 93, .75);
+}
+.btn.ghost {
+  color: #dbe7ff;
+}
+.btn:active {
+  filter: brightness(1.14);
+}
+.btn[disabled] {
+  opacity: .45;
+}
+.btn-row {
+  display: flex;
+  gap: 8.00px;
+}
+.btn-row .btn {
+  flex: 1;
+}
+/* 编译卡底部那排：和网页一样 11px 上间距、8px 间隔 */
+.b-actions {
+  margin-top: 11.00px;
+  gap: 8.00px;
+}
+
+/* ---------------- 分类 chips（玻璃胶囊，参数同底部导航） ---------------- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6.00px;
+  /* 网页里 .chips 住在 main 的 11px 内边距里，自身只带 margin-bottom:10px。
+     这里是通栏布局，所以左右各补 11px，否则第一枚胶囊会贴着屏幕边。
+     刻意不加 padding-top / 不放大 line-height：胶囊高必须还是 32px，和网页一致 */
+  margin: 0 11.00px 10.00px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 7.00px 15.00px;
+  border-radius: var(--r-pill);
+  border: 0.50px solid rgba(255, 255, 255, .18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .05)),
+    rgba(120, 128, 150, .10);
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .45);
+  color: rgba(255, 255, 255, .70);
+  font-size: 12.50px;
+  font-weight: 600;
+  line-height: 1.35;                      /* 页面全局 1.55 会把胶囊撑到 35.4px（网页 32px） */
+}
+.chip.on {
+  color: #fff;
+  border-color: rgba(120, 195, 255, .55);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .30), rgba(255, 255, 255, .08)),
+    rgba(0, 145, 255, .42);
+  box-shadow:
+    inset 0 1.50px 0 rgba(255, 255, 255, .9),
+    0 8.00px 18.00px -10.00px rgba(0, 130, 255, .7);
+}
+.chip .n {
+  margin-left: 4.00px;
+  opacity: .65;
+  font-variant-numeric: tabular-nums;
+}
+.chips-row {
+  display: flex;
+  align-items: center;
+  gap: 6.00px;
+  padding: 2.00px 11.00px 7.00px;
+}
+.chips-row .chips {
+  flex: 1;
+  min-width: 0;
+  margin: 0;                              /* 外壳 .chips-row 已经带 11.00px 内边距 */
+}
+
+/* ---------------- 列表（网页 .item：单行 名称 + 标签 + 大小 + 时间） ---------------- */
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8.00px;
+  padding: 10.00px 4.00px;
+  border-bottom: 0.50px solid rgba(120, 145, 220, .10);
+}
+.item:last-child {
+  border-bottom: none;
+}
+.item:active {
+  background: rgba(120, 160, 255, .10);
+  border-radius: 10.00px;
+}
+.item-main {
+  flex: 1;
+  min-width: 0;
+}
+.item-t {
+  font-size: 13.00px;                        /* 网页 .item .nm 13px */
+  color: var(--txt);
+  word-break: break-all;
+}
+.item-s {
+  margin-top: 2.00px;
+  font-size: 11.00px;
+  color: var(--dim-2);
+}
+.nm {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.00px;
+  word-break: break-all;
+}
+.sz {
+  flex: none;
+  font-size: 11.00px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.tm {
+  flex: none;
+  width: 82.00px;
+  text-align: right;
+  font-size: 11.00px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+/* 小标签：网页 .tag（编译归档的 Succeeded / Failed 用的就是它，不是 .badge）
+   颜色名按用途取：blue = 成功/报告、red = 失败/崩溃、green = 当前状态、teal = 截图 */
+.tag {
+  flex: none;
+  font-size: 10.00px;
+  padding: 2.00px 7.00px;
+  border-radius: 5.00px;
+  background: rgba(150, 170, 230, .12);
+  border: 0.50px solid var(--line);
+  color: var(--dim);
+}
+.tag.blue {
+  background: rgba(76, 141, 255, .16);
+  border-color: rgba(120, 180, 255, .40);
+  color: #9cc4ff;
+}
+.tag.red {
+  background: rgba(255, 93, 93, .16);
+  border-color: rgba(255, 143, 143, .40);
+  color: var(--bad);
+}
+.tag.green {
+  background: rgba(47, 191, 113, .16);
+  border-color: rgba(99, 230, 164, .40);
+  color: #8ff0bd;
+}
+.tag.teal {
+  background: rgba(126, 224, 192, .14);
+  border-color: rgba(126, 224, 192, .40);
+  color: var(--story);
+}
+.thumb {
+  width: 40.00px;
+  height: 40.00px;
+  border-radius: 9.00px;
+  flex: none;
+  background: #0d1327;
+  border: 0.50px solid rgba(160, 190, 255, .25);
+  box-shadow: 0 3.00px 10.00px rgba(3, 6, 18, .45);
+}
+
+/* ---------------- 卡内的「井」：日志框 ---------------- */
+
+.logbox {
+  font-family: var(--mono);
+  font-size: 11.50px;                        /* 网页 11.5px */
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #c6d0e8;
+  padding: 9.00px 11.00px;
+  border-radius: var(--r-well);
+  background: rgba(5, 9, 20, .52);
+  border: 0.50px solid rgba(255, 255, 255, .07);
+  box-shadow: inset 0 1.00px 6.00px rgba(0, 0, 0, .38);
+}
+.logbox .l {
+  padding: 1.00px 0;
+}
+
+/* ---------------- 空状态 ---------------- */
+
+.empty {
+  margin: 0 11.00px 12.00px;
+  padding: 45.00px 22.00px;
+  border-radius: var(--r-card);
+  background:
+    linear-gradient(152deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .03) 52%, rgba(255, 255, 255, .07)),
+    rgba(18, 18, 18, .38);
+  border: 0.50px solid rgba(255, 255, 255, .10);
+  box-shadow: inset 0 1.50px 0 rgba(255, 255, 255, .45), 0 24.00px 28.00px -14.00px rgba(0, 0, 0, .45);
+  text-align: center;
+}
+.empty-t {
+  font-size: 16.00px;
+  font-weight: 650;
+  margin-bottom: 7.00px;
+}
+.empty-b {
+  font-size: 12.50px;
+  line-height: 1.75;
+  color: var(--dim);
+}
+.empty-b code {
+  font-family: var(--mono);
+  color: #9fd0ff;
+}
+.empty-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 14.00px;
+  padding: 9.00px 23.00px;
+  border-radius: var(--r-pill);
+  font-size: 13.00px;
+  font-weight: 650;
+  color: #fff;
+  border: 0.50px solid rgba(175, 210, 255, .45);
+  background:
+    radial-gradient(120% 160% at 50% -50%, rgba(255, 255, 255, .55), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(160deg, rgba(76, 141, 255, .60), rgba(58, 104, 224, .45));
+  box-shadow: inset 0 1.00px 0 rgba(255, 255, 255, .58), 0 14.00px 30.00px -14.00px rgba(60, 120, 255, .8);
+}
+
+/* 底部留白：内容不被浮动页签压到（页签本体 65.00px + 底距 12.00px + 余量）
+   ⚠ 必须把安全区算进去：iPhone 的 home 指示条有 34px，只写 90.00px 时
+     列表最后一行正好被压在页签底下（"没适配手机"最常见的真身）。 */
+.pad-b {
+  height: calc(90.00px + 0px);
+}
+
+/* ---------------- 自绘遮罩 / 底部确认条 ----------------
+   刻意不用 wx.showModal：系统弹窗是浅色直角卡片，压在深色玻璃上很突兀。
+   点遮罩 = 取消，点卡片本身 = 什么都不做（catchtap 拦住冒泡）。 */
+
+.mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 80;
+  background: rgba(3, 6, 15, .62);
+  display: flex;
+  align-items: flex-end;
+}
+.sheet {
+  width: 100%;
+  padding: 17.00px 16.00px 23.00px;
+  border-radius: 17.00px 17.00px 0 0;
+  background: #131a2c;
+  border-top: 0.50px solid rgba(255, 255, 255, .14);
+  animation: sheet-in .2s ease-out;
+}
+@keyframes sheet-in {
+  from { transform: translateY(20.00px); opacity: .6; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.sheet-t {
+  font-size: 16.00px;
+  font-weight: 650;
+}
+.sheet-b {
+  margin-top: 6.00px;
+  font-size: 12.50px;
+  line-height: 1.65;
+  color: var(--dim);
+}
+
+/* 轻提示：自己画一条，避免 wx.showToast 的高亮底色打断整体色调
+   ⚠ 底距要抬到浮动页签之上（页签 65.00px + 底距 12.00px + 余量），再叠安全区 */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(95.00px + 0px);
+  transform: translateX(-50%);
+  z-index: 90;
+  max-width: 78%;
+  padding: 8.00px 16.00px;
+  border-radius: 499.50px;
+  font-size: 12.50px;
+  color: #fff;
+  background: rgba(18, 24, 42, .96);
+  border: 0.50px solid rgba(255, 255, 255, .16);
+  box-shadow: 0 5.00px 15.00px rgba(0, 0, 0, .45);
+}
+
+/* 运行页 —— 参数对齐 web/style.css 的 #pane-run */
+
+/* 启停条：网页 .runbar { gap:10px; margin-bottom:10px } + .b-btn 不拉伸 */
+.runbar {
+  display: flex;
+  align-items: center;
+  gap: 10.00px;
+  margin: 0 11.00px 10.00px;
+}
+.run-btn {
+  flex: 0 0 auto;
+  padding: 9.00px 18.00px;
+}
+.run-cmd {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.00px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 复制按钮始终贴右：UE 工程没有「启动日志」时，它就是这一行唯一的内容 */
+.runbar .gear {
+  margin-left: auto;
+}
+
+/* 通栏日志：网页 .logbox.big —— 自己就是一块玻璃，不再套卡片 */
+.log.big {
+  margin: 0 11.00px;
+  /* ⚠ 不要写 calc(100vh - 150.00px)：rpx 混进 calc 在部分基础库上算不出来，
+     结果高度塌成 0，日志一条都看不见。固定 vh + 下限就够了。
+     真正的高度由 run.js 的 fitLog() 实测后写在行内 style 上，这里只是兜底。 */
+  height: 72vh;
+  min-height: 210.00px;
+  /* ⚠ 必须 border-box：view 默认 content-box，72vh 之外还要再加 18px 内边距和边框，
+     整块比预期高 20px —— 矮屏上正好把最后几行顶到页签底下。 */
+  box-sizing: border-box;
+  border-radius: var(--r-card);
+  background:
+    linear-gradient(152deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .03) 52%, rgba(255, 255, 255, .08)),
+    rgba(18, 18, 18, .40);
+  border: 0.50px solid rgba(255, 255, 255, .10);
+  box-shadow:
+    inset 0 1.50px 0 rgba(255, 255, 255, .22),
+    0 20.00px 40.00px -20.00px rgba(2, 6, 18, .9);
+}
+
+/* 行内三段：时间 / 类别 / 正文（配色同网页 .logbox 的 .t / .c）
+   ⚠ 标签之间的空格会被 WXML 编译期吃掉 ⇒ 间距一律用 margin，别在源码里敲空格。 */
+.t {
+  color: #5d6a92;
+  margin-right: 4.00px;
+}
+.c {
+  color: #6f7fae;
+  margin-right: 3.00px;
+}
+.m {
+  color: #c6d0e8;
+}
+.l.err {
+  color: var(--bad);
+}
+.l.warn {
+  color: var(--warn);
+}
+.l.story {
+  color: var(--story);
+}
+
+/* 浮动玻璃页签 —— 参数抄 web/style.css 的 #tabbar / #tab-glider，1px = 1.00px */
+
+.tb {
+  position: fixed;
+  left: 50%;
+  bottom: calc(12.00px + 0px);
+  transform: translateX(-50%);
+  z-index: 30;
+  width: calc(100% - 22.00px);
+  max-width: 520.00px;
+  padding: 7.00px;
+  border-radius: 34.00px;
+  border: 0.50px solid rgba(255, 255, 255, .38);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .12) 52%, rgba(255, 255, 255, .18)),
+    rgba(120, 128, 150, .16);
+  /* 页签是浮在滚动内容上的：没有这一层模糊，底下的日志会直接透出来，文字互相干扰。
+     iOS 与安卓 XWeb 都认 -webkit- 前缀；不认的机型退化成半透明磨砂（仍可读）。 */
+  backdrop-filter: blur(10px) saturate(1.5);
+  -webkit-backdrop-filter: blur(10px) saturate(1.5);
+  box-shadow:
+    inset 0 1.50px 0 rgba(255, 255, 255, .95),
+    inset 0 -1.00px 0 rgba(255, 255, 255, .22),
+    0 22.00px 34.00px -16.00px rgba(0, 0, 0, .65);
+  box-sizing: border-box;
+}
+
+.tb-in {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+/* 滑块：宽度正好一个页签（5 等分），位移靠 translateX 百分比 = 自宽，
+   所以不依赖容器实测宽度，横竖屏切换也不会错位。 */
+.glider {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 20%;
+  border-radius: 28.00px;
+  border: 0.50px solid rgba(255, 255, 255, .55);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .42), rgba(255, 255, 255, .18)),
+    rgba(255, 255, 255, .10);
+  box-shadow:
+    inset 0 1.50px 0 rgba(255, 255, 255, .95),
+    0 10.00px 20.00px -12.00px rgba(0, 0, 0, .55);
+  transition: transform .34s cubic-bezier(.22, .9, .24, 1);
+  pointer-events: none;
+}
+
+.tab {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 7.00px 0 6.00px;
+  border-radius: 26.00px;
+  color: rgba(255, 255, 255, .62);
+  font-size: 11.00px;
+  font-weight: 600;
+  line-height: 1;
+}
+.tab:active {
+  background: rgba(255, 255, 255, .06);
+}
+.tab.on:active {
+  background: transparent;
+}
+.tab.on {
+  color: #0a84ff;
+}
+
+.ti {
+  width: 23.00px;
+  height: 23.00px;
+  margin-bottom: 3.00px;
+}
+.tab.on .ti {
+  /* 网页用 drop-shadow 给选中图标描一圈蓝光，PNG 图标用同样的滤镜补上 */
+  filter: drop-shadow(0 0.50px 3.00px rgba(0, 130, 255, .45));
+}
+
+.tl {
+  font-size: 11.00px;
+  line-height: 1;
+}
+
+/* 预览专用：把 WXSS 里靠 page 生效的东西补回来 */
+body{min-height:812px;padding-bottom:110px}
+
+</style></head><body><div class="projbar"><div class="proj-scroll" style=";overflow-x:auto;"><div class="proj on"><div class="pd ok"></div><span>CursorAdventure</span><span class="kb">Unreal Engine</span></div><div class="proj "><div class="pd ok"></div><span>移动简历</span><span class="kb">Node / 前端构建</span></div></div><div class="gear">设置</div></div><div class="chips"><div class="chip on">
+      全部
+    </div><div class="chip ">
+      剧情
+    </div><div class="chip ">
+      警告 / 错误
+    </div><div class="chip ">
+      流送
+    </div></div><div class="logbox big log" style="height:475px" style="height:475px;overflow:auto;"><div class="l " id="R0"><span class="t">[2026.10.21-03.31.21:566]</span><span class="c">LogToolsetRegistry:</span><span class="m">Registering Toolset conversation_toolset.toolsets.conversation.ConversationTools</span></div><div class="l " id="R1"><span class="t">[2026.10.21-03.31.21:566]</span><span class="c">LogPython:</span><span class="m">正在运行启动脚本F:/UE4yinq/UE_5.8/Engine/Plugins/Experimental/Toolsets/ConversationToolset/Content/Python/init_unreal.py…… took 11.457 ms (total: 324.503 ms)</span></div><div class="l " id="R2"><span class="t">[2026.10.21-03.31.21:566]</span><span class="c">LogPython:</span><span class="m">正在运行启动脚本F:/UE4yinq/UE_5.8/Engine/Plugins/Experimental/Toolsets/AnimationAssistantToolset/Content/Python/init_unreal.py…… started...</span></div><div class="l " id="R3"><span class="t">[2026.10.21-03.31.21:625]</span><span class="c">LogModelContextProtocol:</span><span class="m">Tool search enabled: registered 3 meta-tools (44 toolsets discoverable via list_toolsets)</span></div><div class="l " id="R4"><span class="t">[2026.10.21-03.31.21:625]</span><span class="c">LogToolsetRegistry:</span><span class="m">Registering Toolset animation_toolset.toolsets.controlrig.ControlRigTools</span></div><div class="l " id="R5"><span class="t">[2026.10.21-03.31.21:636]</span><span class="c">LogModelContextProtocol:</span><span class="m">Tool search enabled: registered 3 meta-tools (45 toolsets discoverable via list_toolsets)</span></div><div class="l " id="R6"><span class="t">[2026.10.21-03.31.21:636]</span><span class="c">LogToolsetRegistry:</span><span class="m">Registering Toolset animation_toolset.toolsets.sequencer.SequencerTools</span></div><div class="l " id="R7"><span class="t">[2026.10.21-03.31.21:638]</span><span class="c">LogModelContextProtocol:</span><span class="m">Tool search enabled: registered 3 meta-tools (46 toolsets discoverable via list_toolsets)</span></div><div class="l " id="R8"><span class="t">[2026.10.21-03.31.21:639]</span><span class="c">LogToolsetRegistry:</span><span class="m">Registering Toolset animation_toolset.toolsets.keyframing.SequencerKeyframingTools</span></div><div class="l " id="R9"><span class="t">[2026.10.21-03.31.21:645]</span><span class="c">LogModelContextProtocol:</span><span class="m">Tool search enabled: registered 3 meta-tools (47 toolsets discoverable via list_toolsets)</span></div><div class="l " id="R10"><span class="t">[2026.10.21-03.31.21:645]</span><span class="c">LogToolsetRegistry:</span><span class="m">Registering Toolset animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools</span></div><div class="l " id="R11"><span class="t">[2026.10.21-03.31.21:646]</span><span class="c">LogModelContextProtocol:</span><span class="m">Tool search enabled: registered 3 meta-tools (48 toolsets discoverable via list_toolsets)</span></div><div class="l " id="R12"><span class="t">[2026.10.21-03.31.21:646]</span><span class="c">LogToolsetRegistry:</span><span class="m">Registering Toolset animation_toolset.toolsets.outliner.SequencerOutlinerTools</span></div><div class="l " id="R13"><span class="t">[2026.10.21-03.31.21:647]</span><span class="c">LogModelContextProtocol:</span><span class="m">Tool search enabled: registered 3 meta-tools (49 toolsets discoverable via list_toolsets)</span></div><div class="l " id="R14"><span class="t">[2026.10.21-03.31.21:647]</span><span class="c">LogToolsetRegistry:</span><span class="m">Registering Toolset animation_toolset.toolsets.conditions.SequencerConditionTools</span></div><div class="l " id="R15"><span class="t">[2026.10.21-03.31.21:648]</span><span class="c">LogModelContextProtocol:</span><span class="m">Tool search enabled: registered 3 meta-tools (50 toolsets discoverable via list_toolsets)</span></div><div class="l " id="R16"><span class="t">[2026.10.21-03.31.21:648]</span><span class="c">LogToolsetRegistry:</span><span class="m">Registering Toolset animation_toolset.toolsets.custom_bindings.SequencerCustomBindingTools</span></div><div class="l " id="R17"><span class="t">[2026.10.21-03.31.21:649]</span><span class="c">LogModelContextProtocol:</span><span class="m">Tool search enabled: registered 3 meta-tools (51 toolsets discoverable via list_toolsets)</span></div><div class="l " id="R18"><span class="t">[2026.10.21-03.31.21:649]</span><span class="c">LogToolsetRegistry:</span><span class="m">Registering Toolset animation_toolset.toolsets.import_export.SequencerImportExportTools</span></div><div class="l " id="R19"><span class="t">[2026.10.21-03.31.21:701]</span><span class="c">LogPython:</span><span class="m">正在运行启动脚本F:/UE4yinq/UE_5.8/Engine/Plugins/Experimental/Toolsets/AnimationAssistantToolset/Content/Python/init_unreal.py…… took 135.570 ms (total: 460.074 ms)</span></div><div class="l " id="R20"><span class="t">[2026.10.21-03.31.21:701]</span><span class="c">LogPython:</span><span class="m">正在运行启动脚本F:/UE4yinq/UE_5.8/Engine/Plugins/Experimental/Toolsets/AIModuleToolset/Content/Python/init_unreal.py…… started...</span></div><div class="l " id="R21"><span class="t">[2026.10.21-03.31.21:713]</span><span class="c">LogModelContextProtocol:</span><span class="m">Tool search enabled: registered 3 meta-tools (52 toolsets discoverable via list_toolsets)</span></div><div class="l " id="R22"><span class="t">[2026.10.21-03.31.21:713]</span><span class="c">LogToolsetRegistry:</span><span class="m">Registering Toolset aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools</span></div><div class="l " id="R23"><span class="t">[2026.10.21-03.31.21:713]</span><span class="c">LogPython:</span><span class="m">正在运行启动脚本F:/UE4yinq/UE_5.8/Engine/Plugins/Experimental/Toolsets/AIModuleToolset/Content/Python/init_unreal.py…… took 11.714 ms (total: 471.789 ms)</span></div><div class="l " id="R24"><span class="t">[2026.10.21-03.31.21:713]</span><span class="c">LogPython:</span><span class="m">正在运行启动脚本F:/UE4yinq/UE_5.8/Engine/Plugins/Animation/ControlRig/Content/Python/init_unreal.py…… started...</span></div><div class="l " id="R25"><span class="t">[2026.10.21-03.31.21:753]</span><span class="c">LogPython:</span><span class="m">registering &lt;class 'ControlRigWorkflows.workflow_deformation_rig_preset.provider'&gt;</span></div><div class="l " id="R26"><span class="t">[2026.10.21-03.31.21:794]</span><span class="c">LogPython:</span><span class="m">正在运行启动脚本F:/UE4yinq/UE_5.8/Engine/Plugins/Animation/ControlRig/Content/Python/init_unreal.py…… took 80.784 ms (total: 552.573 ms)</span></div><div class="l " id="R27"><span class="t">[2026.10.21-03.31.21:794]</span><span class="c">LogPython:</span><span class="m">正在运行启动脚本F:/UE4yinq/UE_5.8/Engine/Plugins/Animation/IKRig/Content/Python/init_unreal.py…… started...</span></div><div class="l " id="R28"><span class="t">[2026.10.21-03.31.21:802]</span><span class="c">LogPython:</span><span class="m">正在运行启动脚本F:/UE4yinq/UE_5.8/Engine/Plugins/Animation/IKRig/Content/Python/init_unreal.py…… took 7.226 ms (total: 559.800 ms)</span></div><div class="l " id="R29"><span class="t">[2026.10.21-03.31.21:802]</span><span class="c">LogPython:</span><span class="m">正在运行启动脚本F:/UE4yinq/UE_5.8/Engine/Plugins/Experimental/ToolsetRegistry/Content/Python/init_unreal.py…… started...</span></div><div class="l " id="R30"><span class="t">[2026.10.21-03.31.21:803]</span><span class="c">LogPython:</span><span class="m">正在运行启动脚本F:/UE4yinq/UE_5.8/Engine/Plugins/Experimental/ToolsetRegistry/Content/Python/init_unreal.py…… took 901 us (total: 560.701 ms)</span></div><div class="l " id="R31"><span class="t">[2026.10.21-03.31.21:803]</span><span class="c">LogPython:</span><span class="m">Python enabled via IPythonScriptPlugin::ForceEnablePythonAtRuntime: D:\build\++UE5\Sync\Engine\Plugins\Experimental\PythonScriptPlugin\Source\PythonScriptPlugin\Private\PythonScriptCommandlet.cpp(43:30) int __cdecl UPythonScriptCommandlet::Main(const class FString &amp;)</span></div><div class="l " id="R32"><span class="t">[2026.10.21-03.31.21:803]</span><span class="c">SourceControl:</span><span class="m">版本控制已禁用</span></div><div class="l " id="R33"><span class="t">[2026.10.21-03.31.21:803]</span><span class="c">LogPythonScriptCommandlet:</span><span class="m">Running Python script: E:/UE4/CursorAdventure/Tools/import_bgm.py</span></div><div class="l " id="R34"><span class="t">[2026.10.21-03.31.21:815]</span><span class="c">LogPython:</span><span class="m">BGM 导入：factory=SoundFactory，共 1 首</span></div><div class="l " id="R35"><span class="t">[2026.10.21-03.31.21:911]</span><span class="c">LogFactory:</span><span class="m">SoundWave with SoundFactory (0 0 E:/UE4/CursorAdventure/Content/Audio/BGM_LinWei2.wav)</span></div><div class="l " id="R36"><span class="t">[2026.10.21-03.31.22:082]</span><span class="c">LogAudioDerivedData:</span><span class="m">构建压缩音频格式BINKA散列BINKA_SCVER_5028_R4DV_false_SR0_48000.000000_SR1_32000.000000_SR2_24000.000000_SR3_12000.000000_SR4_8000.000000_QMOD_1.000000_CQLT_-1_ASTH_0.000000_INLC_false_LCK1_0.000000_CSZE_65536_LCF_false_ZCS_256_MCSO_0_END声波BGM_LinWei2...</span></div><div class="l " id="R37"><span class="t">[2026.10.21-03.31.22:090]</span><span class="c">LogFileHelpers:</span><span class="m">InternalPromptForCheckoutAndSave started...</span></div><div class="l " id="R38"><span class="t">[2026.10.21-03.31.22:091]</span><span class="c">LogFileHelpers:</span><span class="m">Saving Package: /Game/Audio/BGM_LinWei2</span></div><div class="l " id="R39"><span class="t">[2026.10.21-03.31.22:092]</span><span class="c">Cmd:</span><span class="m">OBJ SAVEPACKAGE PACKAGE="/Game/Audio/BGM_LinWei2" FILE="E:/UE4/CursorAdventure/Content/Audio/BGM_LinWei2.uasset" SILENT=true</span></div><div class="l " id="R40"><span class="t">[2026.10.21-03.31.23:762]</span><span class="c">LogAudioDerivedData:</span><span class="m">BGM_LinWei2压缩为20.12%（从38,934KB到7,833KB），用质量修改器1.00在质量80处实现BINKA</span></div><div class="l " id="R41"><span class="t">[2026.10.21-03.31.23:953]</span><span class="c">LogAudio:</span><span class="m">Chunk stats for (SoundWave /Game/Audio/BGM_LinWei2.BGM_LinWei2: Duration=226.01 secs, Channels=2), Settings(FirstChunkSize=4294967295 frames, InlineFirst=false, MaxChunkSize=262144), Chunks=32, Chunk0=28 bytes, Chunk1=261799 bytes, ChunkN=259827)</span></div><div class="l " id="R42"><span class="t">[2026.10.21-03.31.23:968]</span><span class="c">LogSavePackage:</span><span class="m">Moving output files for package: /Game/Audio/BGM_LinWei2</span></div><div class="l " id="R43"><span class="t">[2026.10.21-03.31.23:968]</span><span class="c">LogSavePackage:</span><span class="m">Moving 'E:/UE4/CursorAdventure/Saved/BGM_LinWei2997A41614160B3F9ABB23A8B78EE121B.tmp' to 'E:/UE4/CursorAdventure/Content/Audio/BGM_LinWei2.uasset'</span></div><div class="l " id="R44"><span class="t">[2026.10.21-03.31.23:973]</span><span class="c">LogModuleManager:</span><span class="m">'UncontrolledChangelists' ('F:/UE4yinq/UE_5.8/Engine/Binaries/Win64/UnrealEditor-UncontrolledChangelists.dll')</span></div><div class="l " id="R45"><span class="t">[2026.10.21-03.31.24:034]</span><span class="c">LogSourceControl:</span><span class="m">Uncontrolled Changelist persistency file loaded E:/UE4/CursorAdventure/Saved/SourceControl/UncontrolledChangelists.json</span></div><div class="l " id="R46"><span class="t">[2026.10.21-03.31.24:035]</span><span class="c">LogSourceControl:</span><span class="m">Uncontrolled asset discovery started...</span></div><div class="l " id="R47"><span class="t">[2026.10.21-03.31.24:035]</span><span class="c">LogFileHelpers:</span><span class="m">InternalPromptForCheckoutAndSave took 1.94 sec</span></div><div class="l " id="R48"><span class="t">[2026.10.21-03.31.24:047]</span><span class="c">LogFileHelpers:</span><span class="m">InternalPromptForCheckoutAndSave started...</span></div><div class="l " id="R49"><span class="t">[2026.10.21-03.31.24:047]</span><span class="c">LogFileHelpers:</span><span class="m">Saving Package: /Game/Audio/BGM_LinWei2</span></div><div class="l " id="R50"><span class="t">[2026.10.21-03.31.24:047]</span><span class="c">Cmd:</span><span class="m">OBJ SAVEPACKAGE PACKAGE="/Game/Audio/BGM_LinWei2" FILE="E:/UE4/CursorAdventure/Content/Audio/BGM_LinWei2.uasset" SILENT=true</span></div><div class="l " id="R51"><span class="t">[2026.10.21-03.31.24:281]</span><span class="c">LogSavePackage:</span><span class="m">Moving output files for package: /Game/Audio/BGM_LinWei2</span></div><div class="l " id="R52"><span class="t">[2026.10.21-03.31.24:284]</span><span class="c">LogSavePackage:</span><span class="m">Moving 'E:/UE4/CursorAdventure/Saved/BGM_LinWei2994A66AE4265F118655FF99E58D065AD.tmp' to 'E:/UE4/CursorAdventure/Content/Audio/BGM_LinWei2.uasset'</span></div><div class="l " id="R53"><span class="t">[2026.10.21-03.31.24:357]</span><span class="c">LogSourceControl:</span><span class="m">Uncontrolled asset discovery finished in 0.322045 seconds (Found 962 uncontrolled assets)</span></div><div class="l " id="R54"><span class="t">[2026.10.21-03.31.25:697]</span><span class="c">LogFileHelpers:</span><span class="m">InternalPromptForCheckoutAndSave took 1.65 sec (total: 3.59 sec)</span></div><div class="l " id="R55"><span class="t">[2026.10.21-03.31.25:698]</span><span class="c">LogPython:</span><span class="m">导入完成 BGM_LinWei2 -&gt; /Game/Audio/BGM_LinWei2（38.0 MB，{'duration': 226.0114288330078, 'num_channels': 2, 'sample_rate': 44100, 'raw_pcm_data_size': None, 'looping': True}）</span></div><div class="l " id="R56"><span class="t">[2026.10.21-03.31.25:729]</span><span class="c">LogPython:</span><span class="m">报告：E:\UE4\CursorAdventure\Saved\BGMImportReport.json</span></div><div class="l " id="R57"><span class="t">[2026.10.21-03.31.25:729]</span><span class="c">LogPythonScriptCommandlet:</span><span class="m">Python script executed successfully</span></div><div class="l " id="R58"><span class="t">[2026.10.21-03.31.25:730]</span><span class="c">LogCore:</span><span class="m">Engine exit requested (reason: Commandlet PythonScriptCommandlet_0 finished execution (result 0))</span></div><div class="l " id="R59"><span class="t">[2026.10.21-03.31.25:730]</span><span class="c">LogInit:</span><span class="m"></span></div><div class="l " id="R60"><span class="t">[2026.10.21-03.31.25:730]</span><span class="c">LogInit:</span><span class="m">Success - 0 error(s), 0 warning(s)</span></div><div class="l " id="R61"><span class="t">[2026.10.21-03.31.25:730]</span><span class="c">LogInit:</span><span class="m"></span></div><div class="l " id="R62"><span class="c">Raw:</span><span class="m">Execution of commandlet took:  4.49 seconds, PeakPhysMemoryMB=2049 MB, PeakVirtMemoryMB=1877 MB</span></div><div class="l " id="R63"><span class="t">[2026.10.21-03.31.25:730]</span><span class="c">LogCore:</span><span class="m">Engine exit requested (reason: EngineExit() was called; note: exit was already requested)</span></div><div class="l " id="R64"><span class="t">[2026.10.21-03.31.25:731]</span><span class="c">LogStaticMesh:</span><span class="m">Abandoning remaining async distance field tasks for shutdown</span></div><div class="l " id="R65"><span class="t">[2026.10.21-03.31.25:731]</span><span class="c">LogStaticMesh:</span><span class="m">Abandoning remaining async card representation tasks for shutdown</span></div><div class="l " id="R66"><span class="t">[2026.10.21-03.31.25:731]</span><span class="c">MassEntity:</span><span class="m">新页面：MassEntity</span></div><div class="l " id="R67"><span class="t">[2026.10.21-03.31.25:732]</span><span class="c">LogMovieScene:</span><span class="m">USequencerBakeSubsystem subsystem deinitialized.</span></div><div class="l " id="R68"><span class="t">[2026.10.21-03.31.25:761]</span><span class="c">LogTedsSettings:</span><span class="m">:Deinitialize</span></div><div class="l " id="R69"><span class="t">[2026.10.21-03.31.25:761]</span><span class="c">LogToolsetRegistry:</span><span class="m">Unregistering Toolset ToolsetRegistry.AgentSkillToolset</span></div><div class="l " id="R70"><span class="t">[2026.10.21-03.31.25:761]</span><span class="c">LogModelContextProtocol:</span><span class="m">Tool search enabled: registered 3 meta-tools (51 toolsets discoverable via list_toolsets)</span></div><div class="l " id="R71"><span class="t">[2026.10.21-03.31.25:763]</span><span class="c">LogLevelSequenceEditor:</span><span class="m">LevelSequenceEditor subsystem deinitialized.</span></div><div class="l " id="R72"><span class="t">[2026.10.21-03.31.25:763]</span><span class="c">LogToolsetRegistry:</span><span class="m">Unregistering Toolset AutomationTestToolset.AutomationTestToolset</span></div><div class="l " id="R73"><span class="t">[2026.10.21-03.31.25:763]</span><span class="c">LogModelContextProtocol:</span><span class="m">Tool search enabled: registered 3 meta-tools (50 toolsets discoverable via list_toolsets)</span></div><div class="l " id="R74"><span class="t">[2026.10.21-03.31.25:763]</span><span class="c">LogToolsetRegistry:</span><span class="m">Unregistering Toolset SlateInspectorToolset.SlateInspectorToolset</span></div><div class="l " id="R75"><span class="t">[2026.10.21-03.31.25:763]</span><span class="c">LogModelContextProtocol:</span><span class="m">Tool search enabled: registered 3 meta-tools (49 toolsets discoverable via list_toolsets)</span></div><div class="l " id="R76"><span class="t">[2026.10.21-03.31.25:767]</span><span class="c">LogRuntimeTelemetry:</span><span class="m">Recording EnginePreExit events</span></div><div class="l " id="R77"><span class="t">[2026.10.21-03.31.25:768]</span><span class="c">LogGameFeatures:</span><span class="m">Shutting down game features subsystem</span></div><div class="l " id="R78"><span class="t">[2026.10.21-03.31.25:769]</span><span class="c">LogExit:</span><span class="m">Preparing to exit.</span></div><div class="l " id="R79"><span class="t">[2026.10.21-03.31.26:013]</span><span class="c">LogUObjectHash:</span><span class="m">Compacting FUObjectHashTables data took   1.00ms</span></div><div class="l " id="R80"><span class="t">[2026.10.21-03.31.26:031]</span><span class="c">LogAssetRegistry:</span><span class="m">CleanupOrphanedCacheFiles (PostWrite): 1 .ref files found, 1 referenced binaries</span></div><div class="l " id="R81"><span class="t">[2026.10.21-03.31.26:031]</span><span class="c">LogAssetRegistry:</span><span class="m">CleanupOrphanedCacheFiles: 1 total binaries, 1 referenced (kept), 0 old-style pre-migration (kept), 0 orphans deleted, 0 orphans locked (kept)</span></div><div class="l " id="R82"><span class="t">[2026.10.21-03.31.26:058]</span><span class="c">LogDemo:</span><span class="m">Cleaned up 0 splitscreen connections, owner deletion: enabled</span></div><div class="l " id="R83"><span class="t">[2026.10.21-03.31.26:071]</span><span class="c">LogExit:</span><span class="m">Editor shut down</span></div><div class="l " id="R84"><span class="t">[2026.10.21-03.31.26:086]</span><span class="c">LogTemp:</span><span class="m">Actor being destructed</span></div><div class="l " id="R85"><span class="t">[2026.10.21-03.31.26:097]</span><span class="c">LogEditorDataStorage:</span><span class="m">Destroyed TEDS Core.</span></div><div class="l " id="R86"><span class="t">[2026.10.21-03.31.26:097]</span><span class="c">LogEditorDataStorage:</span><span class="m">Destroyed TEDS Compatibility.</span></div><div class="l " id="R87"><span class="t">[2026.10.21-03.31.26:176]</span><span class="c">LogExit:</span><span class="m">Object subsystem successfully closed.</span></div><div class="l " id="R88"><span class="t">[2026.10.21-03.31.26:258]</span><span class="c">LogShaderCompilers:</span><span class="m">Exiting ShaderCompilingThread</span></div><div class="l " id="R89"><span class="t">[2026.10.21-03.31.26:403]</span><span class="c">LogSourceControl:</span><span class="m">Uncontrolled Changelist persistency file saved E:/UE4/CursorAdventure/Saved/SourceControl/UncontrolledChangelists.json</span></div><div class="l " id="R90"><span class="t">[2026.10.21-03.31.26:403]</span><span class="c">LogDLSSEditor:</span><span class="m">:ShutdownModule Enter</span></div><div class="l " id="R91"><span class="t">[2026.10.21-03.31.26:403]</span><span class="c">LogDLSSEditor:</span><span class="m">:ShutdownModule Leave</span></div><div class="l " id="R92"><span class="t">[2026.10.21-03.31.26:403]</span><span class="c">LogDLSSNGXRHI:</span><span class="m">:ShutdownModule Enter</span></div><div class="l " id="R93"><span class="t">[2026.10.21-03.31.26:403]</span><span class="c">LogDLSSNGXRHI:</span><span class="m">:ShutdownModule Leave</span></div><div class="l " id="R94"><span class="t">[2026.10.21-03.31.26:403]</span><span class="c">LogDLSS:</span><span class="m">:ShutdownModule Enter</span></div><div class="l " id="R95"><span class="t">[2026.10.21-03.31.26:403]</span><span class="c">LogDLSS:</span><span class="m">:ShutdownModule Leave</span></div><div class="l " id="R96"><span class="t">[2026.10.21-03.31.26:404]</span><span class="c">LogTextureGraphEngine:</span><span class="m">Destroying the TextureGraphEngine!</span></div><div class="l " id="R97"><span class="t">[2026.10.21-03.31.26:413]</span><span class="c">LogSemanticSearch:</span><span class="m">Cancelled pending HTTP requests (InFlight: 0)</span></div><div class="l " id="R98"><span class="t">[2026.10.21-03.31.26:413]</span><span class="c">LogSemanticSearch:</span><span class="m">Cancelled pending HTTP requests (InFlight: 0)</span></div><div class="l " id="R99"><span class="t">[2026.10.21-03.31.26:413]</span><span class="c">LogSemanticSearch:</span><span class="m">Canceled all tasks (IndexId=2356906542)</span></div><div class="l " id="R100"><span class="t">[2026.10.21-03.31.26:413]</span><span class="c">LogObjectProfiler:</span><span class="m">Shutdown</span></div><div class="l " id="R101"><span class="t">[2026.10.21-03.31.26:413]</span><span class="c">LogMemoryProfiler:</span><span class="m">Shutdown</span></div><div class="l " id="R102"><span class="t">[2026.10.21-03.31.26:413]</span><span class="c">LogNetworkingProfiler:</span><span class="m">Shutdown</span></div><div class="l " id="R103"><span class="t">[2026.10.21-03.31.26:413]</span><span class="c">LogLoadingProfiler:</span><span class="m">Shutdown</span></div><div class="l " id="R104"><span class="t">[2026.10.21-03.31.26:413]</span><span class="c">LogTimingProfiler:</span><span class="m">Shutdown</span></div><div class="l " id="R105"><span class="t">[2026.10.21-03.31.26:414]</span><span class="c">LogChaosVDEditor:</span><span class="m">[FChaosVDExtensionsManager::UnRegisterExtension] UnRegistering CVD Extension [FChaosVDGenericDebugDrawExtension] ...</span></div><div class="l " id="R106"><span class="t">[2026.10.21-03.31.26:414]</span><span class="c">LogChaosVDEditor:</span><span class="m">[FChaosVDExtensionsManager::UnRegisterExtension] UnRegistering CVD Extension [FChaosVDAccelerationStructuresExtension] ...</span></div><div class="l " id="R107"><span class="t">[2026.10.21-03.31.26:414]</span><span class="c">LogChaosVDEditor:</span><span class="m">[FChaosVDExtensionsManager::UnRegisterExtension] UnRegistering CVD Extension [FChaosVDCameraTracesExtension] ...</span></div><div class="l " id="R108"><span class="t">[2026.10.21-03.31.26:414]</span><span class="c">LogChaosVDEditor:</span><span class="m">[FChaosVDExtensionsManager::UnRegisterExtension] UnRegistering CVD Extension [FChaosVDParticleExtraDataExtension] ...</span></div><div class="l " id="R109"><span class="t">[2026.10.21-03.31.26:414]</span><span class="c">LogChaosVDEditor:</span><span class="m">[FChaosVDExtensionsManager::UnRegisterExtension] UnRegistering CVD Extension [FPerformanceMetricsExtension] ...</span></div><div class="l " id="R110"><span class="t">[2026.10.21-03.31.26:414]</span><span class="c">LogChaosVDEditor:</span><span class="m">[FChaosVDExtensionsManager::UnRegisterExtension] UnRegistering CVD Extension [FMoverCVDExtension] ...</span></div><div class="l " id="R111"><span class="t">[2026.10.21-03.31.26:474]</span><span class="c">LogChaosDD:</span><span class="m">Chaos Debug Draw Shutdown</span></div><div class="l " id="R112"><span class="t">[2026.10.21-03.31.26:474]</span><span class="c">LogDLSSNGXVulkanRHIPreInit:</span><span class="m">:ShutdownModule Enter</span></div><div class="l " id="R113"><span class="t">[2026.10.21-03.31.26:475]</span><span class="c">LogDLSSNGXVulkanRHIPreInit:</span><span class="m">:ShutdownModule Leave</span></div><div class="l " id="R114"><span class="t">[2026.10.21-03.31.26:513]</span><span class="c">LogEOSShared:</span><span class="m">:Shutdown EOS_Shutdown Result=[EOS_Success]</span></div><div class="l " id="R115"><span class="t">[2026.10.21-03.31.26:513]</span><span class="c">LogNFORDenoise:</span><span class="m">NFORDenoise function shutting down</span></div><div class="l " id="R116"><span class="t">[2026.10.21-03.31.26:513]</span><span class="c">LogXGEController:</span><span class="m">Cleaning working directory: C:/Users/t1948/AppData/Local/Temp/UnrealXGEWorkingDir/</span></div><div class="l " id="R117"><span class="t">[2026.10.21-03.31.26:515]</span><span class="c">LogPakFile:</span><span class="m">Destroying PakPlatformFile</span></div><div class="l " id="R118"><span class="t">[2026.10.21-03.31.26:621]</span><span class="c">LogExit:</span><span class="m">Exiting.</span></div><div class="l " id="R119"><span class="c">Raw:</span><span class="m">[2026.10.21-03.31.26:648][  0]Log file closed, 10/21/26 11:31:26</span></div></div><div class="tb"><div class="tb-in"><div class="glider" style="transform: translateX(100%)"></div><div class="tab "><img class="ti" src="file:///E:/UE4/dev-monitor/miniprogram/images/tab-build.png"><span class="tl">编译</span></div><div class="tab on"><img class="ti" src="file:///E:/UE4/dev-monitor/miniprogram/images/tab-run-on.png"><span class="tl">运行</span></div><div class="tab "><img class="ti" src="file:///E:/UE4/dev-monitor/miniprogram/images/tab-suite.png"><span class="tl">自检</span></div><div class="tab "><img class="ti" src="file:///E:/UE4/dev-monitor/miniprogram/images/tab-art.png"><span class="tl">产物</span></div><div class="tab "><img class="ti" src="file:///E:/UE4/dev-monitor/miniprogram/images/tab-arch.png"><span class="tl">档案</span></div></div></div>
+<!-- 运行页的日志井高度是真机上由 fitLog() 量出来的（视口 - 上边距 - 页签占位）。
+     静态 HTML 里补一段同样的计算，预览看到的才是真机上的高度 -->
+<script>
+(function () {
+  var el = document.querySelector('.log');
+  if (!el) return;
+  /* 与 run.js 的 fitLog() 同一套算法：页签底距 24rpx + 本体 130rpx + 余量 16rpx = 85px（375 宽）
+     ⚠ 不要在这里量 .tb 的高度：脚本执行时页签图标还没解码完，量出来偏矮，
+       算出的高度会把日志底边压到页签下面（第一次就是这么错的） */
+  var gap = (24 + 130 + 16) * (window.innerWidth / 750);
+  var top = el.getBoundingClientRect().top + window.scrollY;
+  el.style.height = Math.max(160, Math.round(window.innerHeight - top - gap)) + 'px';
+})();
+</script></body></html>

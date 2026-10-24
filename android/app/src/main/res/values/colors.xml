@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 补齐 Capacitor 模板引用但未在本工程定义的 AppCompat 颜色 -->
+    <color name="colorPrimary">#4C8DFF</color>
+    <color name="colorPrimaryDark">#0B1020</color>
+    <color name="colorAccent">#4C8DFF</color>
+
+    <!-- 工程监控暗色主题 -->
+    <color name="bgDark">#0B1020</color>
+    <color name="bgCard">#141B30</color>
+    <color name="border">#253052</color>
+    <color name="txtMain">#E8ECF8</color>
+    <color name="txtDim">#8B96B8</color>
+    <color name="accent">#4C8DFF</color>
+</resources>

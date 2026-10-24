@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>工程监控</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<!-- 不声明 icon 时浏览器会去要 /favicon.ico，服务端没有这个文件 ⇒ 控制台常驻一条 404 -->
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div class="blob-layer" aria-hidden="true">
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+</div>
+
+<header id="topbar">
+  <div class="brand">
+    <span class="dot" id="conn-dot"></span>
+    <span class="brand-t">工程监控</span>
+  </div>
+  <div class="meta" id="meta">连接中…</div>
+</header>
+
+<!-- 工程切换条：配置了多个工程时才出现（单工程时整条隐藏，版式与以前完全一致） -->
+<div id="projbar" class="hidden" role="tablist" aria-label="切换工程"></div>
+
+
+<main>
+
+  <!-- ============ 编译 ============ -->
+  <section class="pane active" id="pane-build">
+    <div class="card glass hero">
+      <div class="row">
+        <span class="badge" id="b-status">等待</span>
+        <span class="grow"></span>
+        <span class="dim" id="b-time">--</span>
+      </div>
+      <div class="step" id="b-step">尚未开始编译</div>
+      <div class="progress"><div class="bar" id="b-bar"></div></div>
+      <div class="row dim small" id="b-counts"></div>
+      <div class="row b-actions">
+        <button class="b-btn primary" id="b-run">开始编译</button>
+        <button class="b-btn" id="b-copy">复制输出</button>
+        <button class="b-btn" id="b-detail">完整日志</button>
+      </div>
+    </div>
+
+    <div class="card glass">
+      <div class="card-h">最近输出</div>
+      <pre class="logbox" id="b-log"></pre>
+    </div>
+
+    <div class="card glass">
+      <div class="card-h" id="b-arch-title">编译归档（BuildLogs）</div>
+      <div class="list" id="b-archives"></div>
+    </div>
+
+    <!-- ============ 作者信息：只在「编译」页显示（放 pane 内，切走随面板一起隐藏） ============ -->
+    <footer id="foot">
+      <div class="foot-line">
+        作者 <strong>B站-传说中帅锅</strong> · <span id="foot-ver">v1.1.1</span>
+      </div>
+      <a class="foot-btn" href="https://www.sgguo.com" target="_blank" rel="noopener noreferrer">
+        发掘更多实用工具 →
+      </a>
+    </footer>
+  </section>
+
+  <!-- ============ 运行 ============ -->
+  <section class="pane" id="pane-run">
+    <!-- 只有配置了运行命令的工程才有这一条（UE 工程没有） -->
+    <div class="runbar hidden" id="runbar">
+      <button class="b-btn primary" id="run-toggle">启动日志</button>
+      <span class="run-cmd" id="run-cmd"></span>
+    </div>
+    <div class="chips" id="run-chips"></div>
+    <div class="logbox big" id="r-log"></div>
+  </section>
+
+  <!-- ============ 自检 ============ -->
+  <section class="pane" id="pane-suite">
+    <div class="card glass hero">
+      <div class="row">
+        <span class="step" id="s-title">自检套件</span>
+        <span class="grow"></span>
+        <span class="dim" id="s-sum">--</span>
+      </div>
+    </div>
+    <div class="grid" id="s-grid"></div>
+  </section>
+
+  <!-- ============ 产物 ============ -->
+  <section class="pane" id="pane-art">
+    <div class="chips" id="art-chips"></div>
+    <!-- 列表也铺一块玻璃：整页都是玻璃面板，只有这里裸在背景上会显得是"漏做" -->
+    <div class="card glass list" id="a-list"></div>
+  </section>
+</main>
+
+<!-- ============ 底部导航（液态玻璃胶囊） ============
+     外圈是一枚大胶囊玻璃，选中项是内嵌的一小块玻璃滑块（#tab-glider，
+     位置/宽度由 app.js 按当前页签实测写入，切页时平滑滑过去）。
+     ============================================ -->
+<nav id="tabbar" role="tablist" aria-label="切换视图">
+  <span id="tab-glider" aria-hidden="true"></span>
+  <button class="tab active" data-tab="build" role="tab">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>
+    <span>编译</span>
+  </button>
+  <button class="tab" data-tab="run" role="tab">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+    <span>运行</span>
+  </button>
+  <button class="tab" data-tab="suite" role="tab">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+    <span>自检</span>
+  </button>
+  <button class="tab" data-tab="art" role="tab">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+    <span>产物</span>
+  </button>
+</nav>
+
+<!-- ============ 产物详情层（全屏玻璃抽屉） ============ -->
+<div id="art-detail" class="hidden">
+  <div class="detail-sheet">
+    <div class="detail-head">
+      <div class="detail-title" id="d-name">--</div>
+      <button class="detail-close" id="d-close">✕</button>
+    </div>
+    <div class="detail-meta" id="d-meta"></div>
+    <div class="detail-body" id="d-body"></div>
+    <div class="detail-actions">
+      <button class="d-btn ok" id="d-copy">复制内容</button>
+      <button class="d-btn" id="d-open">原图打开</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 编译日志详情层（玻璃抽屉，复用产物样式） ============ -->
+<div id="build-detail" class="hidden">
+  <div class="detail-sheet">
+    <div class="detail-head">
+      <div class="detail-title" id="bd-name">--</div>
+      <button class="detail-close" id="bd-close">✕</button>
+    </div>
+    <div class="detail-meta" id="bd-meta"></div>
+    <div class="detail-body" id="bd-body"></div>
+    <div class="detail-actions">
+      <button class="d-btn ok" id="bd-copy">复制内容</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 编译结束提示（自定义弹窗；刻意不用系统 alert） ============ -->
+<div id="bdone" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="bdone-title">
+  <div class="modal-card glass">
+    <div class="modal-ico" id="bdone-ico">✓</div>
+    <div class="modal-title" id="bdone-title">编译成功</div>
+    <div class="modal-sub" id="bdone-sub">--</div>
+    <div class="modal-stats" id="bdone-stats"></div>
+    <div class="modal-actions">
+      <button class="d-btn" id="bdone-view">查看输出</button>
+      <button class="d-btn ok" id="bdone-close">知道了</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 通用确认（替代 confirm；同样是自绘） ============ -->
+<div id="ask" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="ask-title">
+  <div class="modal-card glass">
+    <div class="modal-title" id="ask-title">请确认</div>
+    <div class="modal-sub" id="ask-msg">--</div>
+    <div class="modal-actions">
+      <button class="d-btn" id="ask-no">取消</button>
+      <button class="d-btn warn" id="ask-yes">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 轻提示（替代 alert） ============ -->
+<div id="toast" class="hidden" role="status" aria-live="polite"></div>
+
+<!-- ============ 全屏原图查看器（双指缩放 / 双击 / 拖拽 / 点空白关闭 / 右上角 ✕） ============ -->
+<div id="img-viewer" class="hidden">
+  <img id="iv-img" alt="">
+  <button id="iv-close" type="button" aria-label="关闭" title="关闭">✕</button>
+  <div id="iv-hint">双指缩放 · 双击放大 · ✕ 或点空白关闭</div>
+</div>
+
+<script src="/highlight.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

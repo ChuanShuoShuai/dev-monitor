@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        <!-- Customize your theme here. -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+    </style>
+
+
+    <!--
+      Capacitor 模板的启动主题基于 Theme.SplashScreen，windowBackground 指向
+      @drawable/splash（白底 + Capacitor logo）。MainActivity 已改为不继承
+      BridgeActivity、不调用 installSplashScreen()，若继续用这个主题，
+      那张白色图会一直挂在窗口上盖住界面（小米澎湃 OS 上尤其明显）。
+      这里改用纯暗色主题，windowBackground 直接是页面底色。
+    -->
+    <style name="MonitorTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/bgDark</item>
+        <item name="android:colorBackground">@color/bgDark</item>
+        <item name="android:statusBarColor">@color/bgDark</item>
+        <item name="android:navigationBarColor">@color/bgDark</item>
+        <item name="colorAccent">@color/accent</item>
+        <item name="android:textColorHighlight">#334C8DFF</item>
+        <!-- 暗色状态栏需要白色图标（API 23+ 生效，低版本忽略） -->
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
